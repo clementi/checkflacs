@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -11,20 +12,42 @@ import (
 	"github.com/urfave/cli"
 )
 
+// Config is program configuration
+type Config struct {
+	PathToFlac string `json:"pathToFlac"`
+}
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "checkflacs"
 	app.Usage = "check FLAC files for errors"
 
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "config",
+			Value: "config.json",
+			Usage: "path to config file",
+		},
+	}
+
 	app.Action = func(c *cli.Context) error {
 		root := c.Args().First()
+
+		var config Config
+		configFile, err := os.Open("config.json")
+		defer configFile.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+		jsonParser := json.NewDecoder(configFile)
+		jsonParser.Decode(&config)
 
 		paths := make(chan string)
 		results := make(chan string)
 
 		go getPaths(root, paths)
 
-		go checkFiles(paths, results)
+		go checkFiles(config, paths, results)
 
 		handleResults(results)
 
@@ -50,9 +73,9 @@ func getPaths(root string, paths chan string) {
 	}
 }
 
-func checkFiles(paths chan string, results chan string) {
+func checkFiles(config Config, paths chan string, results chan string) {
 	for path := range paths {
-		cmd := exec.Command("C:/Program Files (x86)/foobar2000/encoders/flac.exe", "-t", path)
+		cmd := exec.Command(config.PathToFlac, "-t", path)
 		go run(cmd, results)
 	}
 }
